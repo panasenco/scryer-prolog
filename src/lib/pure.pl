@@ -2,7 +2,7 @@
    Written Apr 2021 by Aram Panasenco (panasenco@ucla.edu)
    Part of Scryer Prolog.
    
-   pure : Pure representations of strings and numbers in Prolog.
+   pure : Pure representations of strings (and more data types coming soon) in Prolog.
    
    BSD 3-Clause License
    
@@ -37,11 +37,10 @@
 
 
 :- module(pure, [
-                 code//1,
-                 codes//1,
-                 code_incl_excl_t/4,
+                 code_incl_excl/3,
+                 code_incl_excl/4,
                  code_type/2,
-                 code_type/3,
+                 codes//1,
                  integer_hexcodes/2
                 ]).
 
@@ -75,11 +74,13 @@ domainlist_union([Domain1, Domain2 | Tail], NextDomain \/ Domain1) :-
     domainlist_union([Domain2 | Tail], NextDomain).
 
 type_domain(codes(Codes), Domain) :-
+    nonvar(Codes),
     domainlist_union(Codes, Domain).
-/* Code domains generated manually with below helper predicate type_domain_gen/2. */
 type_domain(chars(Chars), Domain) :-
+    nonvar(Chars),
     maplist(char_code, Chars, Codes),
     type_domain(codes(Codes), Domain).
+type_domain(utf8, 0..1112063). /* https://en.wikipedia.org/wiki/UTF-8#cite_note-2 */
 /* Code domains generated manually with below helper predicate type_domain_gen/2. */
 type_domain(alnum, 48..57\/65..90\/95\/97..122\/160..214\/216..246\/248..1871).
 type_domain(alpha, 48..57\/65..90\/95\/97..122\/160..214\/216..246\/248..1871).
@@ -112,20 +113,21 @@ code_type(Code, Type) :-
     type_domain(Type, Domain),
     Code in Domain.
 
-code_type(Code, Type, BoolTruth) :-
-    type_domain(Type, Domain),
-    Code in Domain #<==> IntTruth,
-    int_bool(IntTruth, BoolTruth).
-
-code_incl_excl_t(Code, IncludeTypes, ExcludeTypes, BoolTruth) :-
+code_incl_excl(Code, IncludeTypes, ExcludeTypes) :-
     maplist(type_domain, IncludeTypes, IncludeDomains),
     domainlist_union(IncludeDomains, IncludeUnion),
     maplist(type_domain, ExcludeTypes, ExcludeDomains),
     domainlist_union(ExcludeDomains, ExcludeUnion),
-    call((Code in IncludeUnion) #/\ (#\ Code in ExcludeUnion) #<==> IntTruth),
+    (Code in IncludeUnion) #/\ (#\ Code in ExcludeUnion).
+
+code_incl_excl(Code, IncludeTypes, ExcludeTypes, BoolTruth) :-
+    maplist(type_domain, IncludeTypes, IncludeDomains),
+    domainlist_union(IncludeDomains, IncludeUnion),
+    maplist(type_domain, ExcludeTypes, ExcludeDomains),
+    domainlist_union(ExcludeDomains, ExcludeUnion),
+    ((Code in IncludeUnion) #/\ (#\ Code in ExcludeUnion)) #<==> IntTruth,
     int_bool(IntTruth, BoolTruth).
 
-code(Chars) --> [C], {code_type(C, chars(Chars))}.
 codes(Chars) --> {maplist(char_code, Chars, Codes)}, Codes.
 
 /* BEGIN MISC PREDICATES */

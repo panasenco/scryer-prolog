@@ -63,26 +63,31 @@ escape_map([
     9  - 116  /* \t - t */
 ]).
 
-right_string([C | Tail]) -->
+right_string([InnerCode | Tail]) -->
+    [InnerCode],
     {
         escape_map(EscapeMap),
         pairs_keys(EscapeMap, Escapes),
-        if_(code_incl_excl_t(C, [alphanumeric, ascii_graphic, chars(" ")], [codes(Escapes)]),
-            JsonCodes = [C],
-            (
-                char_code('\\', Backslash),
-                if_(memberd_t(C-PrintCode, EscapeMap),
-                    JsonCodes = [Backslash, PrintCode],
-                    (
-                        char_code('u', U),
-                        integer_hexcodes(C, [H1, H2, H3, H4]),
-                        JsonCodes = [Backslash, U, H1, H2, H3, H4]
-                    )
-                )
-            )
-        )
+        code_incl_excl(InnerCode, [alphanumeric, ascii_graphic, chars(" ")], [codes(Escapes)])
     },
-    JsonCodes,
+    right_string(Tail).
+right_string([InnerCode | Tail]) -->
+    codes("\\"),
+    [EscapeCode],
+    {
+        escape_map(EscapeMap),
+        member(InnerCode-EscapeCode, EscapeMap)
+    },
+    right_string(Tail).
+right_string([InnerCode | Tail]) -->
+    codes("\\u"),
+    [Hex1, Hex2, Hex3, Hex4],
+    {
+        escape_map(EscapeMap),
+        pairs_keys(EscapeMap, Escapes),
+        code_incl_excl(InnerCode, [utf8], [alphanumeric, ascii_graphic, chars(" "), codes(Escapes)]),
+        integer_hexcodes(InnerCode, [Hex1, Hex2, Hex3, Hex4])
+    },
     right_string(Tail).
 right_string("") --> codes("\"").
 json_string(String) --> codes("\""), right_string(String).
