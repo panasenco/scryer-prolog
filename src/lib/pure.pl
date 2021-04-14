@@ -36,10 +36,18 @@
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 
-:- module(pure, [code_type/2, code_type/3, integer_hexcodes/2]).
+:- module(pure, [
+                 code//1,
+                 codes//1,
+                 code_incl_excl_t/4,
+                 code_type/2,
+                 code_type/3,
+                 integer_hexcodes/2
+                ]).
 
 :- use_module(library(between)).
 :- use_module(library(clpz)).
+:- use_module(library(dcgs)).
 :- use_module(library(lists)).
 :- use_module(library(reif)).
 
@@ -48,6 +56,7 @@ int_bool(1, true).
 
 integer_revhexcodes(Integer, [LastHexCode | Tail]) :-
     Integer in 0..sup,
+    LastHexCode in 48..57\/97..102,
     LastDigit #= Integer rem 16,
     LastDigit in 0..9 #<==> LastHexCode #= 48 + LastDigit,
     LastDigit in 10..15 #<==> LastHexCode #= 87 + LastDigit,
@@ -61,6 +70,16 @@ integer_hexcodes(Integer, HexCodes) :-
     integer_revhexcodes(Integer, RevHexCodes),
     reverse(RevHexCodes, HexCodes).
 
+domainlist_union([Domain], Domain).
+domainlist_union([Domain1, Domain2 | Tail], NextDomain \/ Domain1) :-
+    domainlist_union([Domain2 | Tail], NextDomain).
+
+type_domain(codes(Codes), Domain) :-
+    domainlist_union(Codes, Domain).
+/* Code domains generated manually with below helper predicate type_domain_gen/2. */
+type_domain(chars(Chars), Domain) :-
+    maplist(char_code, Chars, Codes),
+    type_domain(codes(Codes), Domain).
 /* Code domains generated manually with below helper predicate type_domain_gen/2. */
 type_domain(alnum, 48..57\/65..90\/95\/97..122\/160..214\/216..246\/248..1871).
 type_domain(alpha, 48..57\/65..90\/95\/97..122\/160..214\/216..246\/248..1871).
@@ -98,6 +117,17 @@ code_type(Code, Type, BoolTruth) :-
     Code in Domain #<==> IntTruth,
     int_bool(IntTruth, BoolTruth).
 
+code_incl_excl_t(Code, IncludeTypes, ExcludeTypes, BoolTruth) :-
+    maplist(type_domain, IncludeTypes, IncludeDomains),
+    domainlist_union(IncludeDomains, IncludeUnion),
+    maplist(type_domain, ExcludeTypes, ExcludeDomains),
+    domainlist_union(ExcludeDomains, ExcludeUnion),
+    call((Code in IncludeUnion) #/\ (#\ Code in ExcludeUnion) #<==> IntTruth),
+    int_bool(IntTruth, BoolTruth).
+
+code(Chars) --> [C], {code_type(C, chars(Chars))}.
+codes(Chars) --> {maplist(char_code, Chars, Codes)}, Codes.
+
 /* BEGIN MISC PREDICATES */
 /* These predicates generate code domains for character types. */
 
@@ -131,12 +161,8 @@ type_code_prev_domainlist(Type, Code, PrevDomainList, FinalDomainList) :-
         type_code_prev_domainlist(Type, NextCode, DomainList, FinalDomainList)
     ).
 
-domainlist_domain([D], D).
-domainlist_domain([D1, D2 | Tail], NextDomain \/ D1) :-
-    domainlist_domain([D2 | Tail], NextDomain).
-
 type_domain_gen(Type, Domain) :-
     type_code_prev_domainlist(Type, 0, [], DomainList),
-    domainlist_domain(DomainList, Domain).
+    domainlist_union(DomainList, Domain).
 
 /* END MISC PREDICATES */
