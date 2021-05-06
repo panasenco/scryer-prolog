@@ -67,7 +67,7 @@ json_boolean(false) --> "false".
 json_object([])           --> "{", json_ws, "}".
 json_object([Pair|Pairs]) -->
         "{",
-        json_members(Pairs, Pair),
+        json_members(Pairs, Pair, []),
         "}".
 
 /*  `json_members//2` below is implemented with a lagged argument to take advantage of first argument indexing.
@@ -79,13 +79,34 @@ json_object([Pair|Pairs]) -->
     That's a logically equivalent and equally clean representation to the lagged argument. However, it leaves
     choice points, while using the lagged argument doesn't. For more info, watch: https://youtu.be/FZLofckPu4A?t=1737
     */
-json_members([], Key-Value)               --> json_member(Key, Value).
-json_members([NextPair|Pairs], Key-Value) -->
+
+json_members([], Key-Value, [])                            --> json_member(Key, Value).
+json_members([Key2-Value2|Pairs], Key1-Value1, FewerPairs) -->
+        { (   (var(Key1), var(Value1)) ->
+              true
+          ;   select(
+                  Key-Value,
+                  [Key1-Value1,Key2-Value2|Pairs],
+                  [KeptKey-KeptValue|OneFewerPairs])
+          ) },
         json_member(Key, Value),
         ",",
-        json_members(Pairs, NextPair).
+        { (   (var(Key1), var(Value1)) ->
+              Key1 = Key,
+              Value1 = Value,
+              KeptKey = Key2,
+              KeptValue = Value2,
+              OneFewerPairs = Pairs
+          ;   true
+          ) },
+        json_members(OneFewerPairs, KeptKey-KeptValue, FewerPairs).
 
-json_member(string(Key), Value) --> json_ws, json_string(Key), json_ws, ":", json_element(Value).
+json_member(Key, Value) -->
+        json_ws,
+        json_string(Key),
+        json_ws,
+        ":",
+        json_element(Value).
 
 json_array([])             --> "[", json_ws, "]".
 json_array([Value|Values]) --> "[", json_elements(Values, Value), "]".
