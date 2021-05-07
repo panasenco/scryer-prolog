@@ -1,9 +1,10 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Written Apr 2021 by Aram Panasenco (panasenco@ucla.edu)
+   Written Apr-May 2021 by Aram Panasenco (panasenco@ucla.edu)
    Part of Scryer Prolog.
    
    `json_chars//1` can be used with [`phrase_from_file/2`](src/lib/pio.pl)
-   or [`phrase/2`](src/lib/dcgs.pl) to parse and generate [JSON](https://www.json.org/json-en.html).
+   or [`phrase/2`](src/lib/dcgs.pl) to parse and generate
+   [JSON](https://www.json.org/json-en.html).
    
    BSD 3-Clause License
    
@@ -44,14 +45,18 @@
 :- use_module(library(dif)).
 :- use_module(library(lists)).
 
-/*  The DCGs are written to match the McKeeman form presented on the right side of https://www.json.org/json-en.html 
-    as closely as possible. Note that the names in the McKeeman form conflict with the pictures on the site. */
+/*  The DCGs are written to match the McKeeman form presented on the right side of
+    https://www.json.org/json-en.html as closely as possible. Note that the names in
+    the McKeeman form conflict with the pictures on the site. */
 json_chars(Internal) --> json_element(Internal).
 
-/*  Because it's impossible to distinguish between an empty array [] and an empty string "", we distinguish between
-    different types of values based on their principal functor. The principal functors match the types defined in
-    the JSON Schema spec here: https://json-schema.org/draft/2020-12/json-schema-validation.html#rfc.section.6.1.1
-    EXCEPT we don't yet support the integer type. There are plans for more JSON Schema support in the near future. */
+/*  Because it's impossible to distinguish between an empty array [] and an empty
+    string "", we distinguish between different types of values based on their
+    principal functor. The principal functors match the types defined in
+    the JSON Schema spec here:
+    https://json-schema.org/draft/2020-12/json-schema-validation.html#rfc.section.6.1.1
+    EXCEPT we don't yet support the integer type. There are plans for more JSON Schema
+    support in the near future. */
 json_value(pairs(Pairs))    --> json_object(Pairs).
 json_value(list(List))      --> json_array(List).
 json_value(string(Chars))   --> json_string(Chars).
@@ -59,47 +64,48 @@ json_value(number(Number))  --> json_number(Number).
 json_value(boolean(Bool))   --> json_boolean(Bool).
 json_value(null)            --> "null".
 
-/*  We pull json_boolean out into its own predicate in order to take advantage of first argument indexing and not leave
-    choice points. For more details, watch this video on decomposing arguments: https://youtu.be/FZLofckPu4A?t=1648 */
+/*  We pull json_boolean out into its own predicate in order to take advantage of
+    first argument indexing and to not leave choice points. For more details, watch
+    this video on decomposing arguments: https://youtu.be/FZLofckPu4A?t=1648 */
 json_boolean(true) --> "true".
 json_boolean(false) --> "false".
 
 json_object([])           --> "{", json_ws, "}".
 json_object([Pair|Pairs]) -->
         "{",
-        json_members(Pairs, Pair, []),
+        json_members([Pair|Pairs]),
         "}".
 
-/*  `json_members//2` below is implemented with a lagged argument to take advantage of first argument indexing.
-    This is a pure performance-driven decision that doesn't affect the logic. The predicate could equivalently be
-    implementes as `json_members//1` below:
-    ```
-    json_members([Key-Value, Pair2 | Pairs]) --> json_member(Key, Value), ",", json_members([Pair2 | Pairs]).
-    ```
-    That's a logically equivalent and equally clean representation to the lagged argument. However, it leaves
-    choice points, while using the lagged argument doesn't. For more info, watch: https://youtu.be/FZLofckPu4A?t=1737
-    */
+/*  Several things to note about `json_members//3` below:
+    1.  It's implemented with a lagged argument to take advantage of first argument
+        indexing. This is a performance-driven decision that doesn't affect the logic.
+        `json_elements//2` below is a much simpler example of using lagged arguments.
+        For more info on lagged arguments, watch: https://youtu.be/FZLofckPu4A?t=1737
+    2.  It consumes pairs as it generates characters, almost like a DCG squared.
+        This is done to achieve key order insensitivity. In JSON, an object
+        {"x":null,"y":null} is equivalent to {"y":null,"x":null}. Logically, a Prolog
+        term should unify with a JSON character sequence even if the order of keys
+        doesn't match between the two. To achieve this, we use `select/3` when
+        generating JSON from instantiated pairs to allow the selection of any pair in
+        a list of pairs without allowing duplicates.
+    3.  I strive to *never* use variable instantiation checks (`var/1` and `nonvar/1`)
+        to change the logic. Instead, I aim to use instantiation checks to adjust
+        the 'control' or 'search strategy' used to execute the logic. For a general
+        overview of the idea, read Bob Kowalski's "Algorithm = Logic + Control":
+        https://www.doc.ic.ac.uk/~rak/papers/algorithm%20=%20logic%20+%20control.pdf
+        For an introduction to search strategies in Prolog, read:
+        https://www.metalevel.at/prolog/sorting#searching
+*/
 
-json_members([], Key-Value, [])                            --> json_member(Key, Value).
-json_members([Key2-Value2|Pairs], Key1-Value1, FewerPairs) -->
-        { (   (var(Key1), var(Value1)) ->
-              true
-          ;   select(
-                  Key-Value,
-                  [Key1-Value1,Key2-Value2|Pairs],
-                  [KeptKey-KeptValue|OneFewerPairs])
-          ) },
-        json_member(Key, Value),
+json_members([Pair|Pairs]) -->
+        { permutation([Pair|Pairs], [OrderedPair|OrderedPairs]) },
+        json_members_ordered(OrderedPairs, OrderedPair).
+
+json_members_ordered([], Key-Value)                    --> json_member(Key, Value).
+json_members_ordered([Key2-Value2|Pairs], Key1-Value1) -->
+        json_member(Key1, Value1),
         ",",
-        { (   (var(Key1), var(Value1)) ->
-              Key1 = Key,
-              Value1 = Value,
-              KeptKey = Key2,
-              KeptValue = Value2,
-              OneFewerPairs = Pairs
-          ;   true
-          ) },
-        json_members(OneFewerPairs, KeptKey-KeptValue, FewerPairs).
+        json_members_ordered(Pairs, Key2-Value2).
 
 json_member(Key, Value) -->
         json_ws,
@@ -111,7 +117,7 @@ json_member(Key, Value) -->
 json_array([])             --> "[", json_ws, "]".
 json_array([Value|Values]) --> "[", json_elements(Values, Value), "]".
 
-/* Also using a lagged argument with `json_elements//2` to take advantage of first-argument indexing */
+/* Also using a lagged argument here with `json_elements//2` */
 json_elements([], Value)                 --> json_element(Value).
 json_elements([NextValue|Values], Value) -->
         json_element(Value),

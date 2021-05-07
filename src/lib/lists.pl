@@ -2,7 +2,8 @@
 		          memberchk/2, reverse/2, length/2, maplist/2,
 		          maplist/3, maplist/4, maplist/5, maplist/6,
 		          maplist/7, maplist/8, maplist/9, same_length/2, nth0/3,
-		          sum_list/2, transpose/2, list_to_set/2, list_max/2, list_min/2]).
+		          sum_list/2, transpose/2, list_to_set/2, list_max/2,
+                          list_min/2, permutation/2]).
 
 
 :- use_module(library(error)).
@@ -231,3 +232,9 @@ list_min([N|Ns], Min) :-
 
 list_min_(N, Min0, Min) :-
     Min is min(N, Min0).
+
+permutation([], []).
+permutation(List, [First|Perm]) :-
+    same_length(List, [First|Perm]),
+    select(First, List, Rest),
+    permutation(Rest, Perm).
